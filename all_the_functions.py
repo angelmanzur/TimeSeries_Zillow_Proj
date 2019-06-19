@@ -114,7 +114,7 @@ def Get_p_params(data):
     obs = len(data)
     p_params = []
     for i,v in enumerate(acfarray):
-        if (v <= (-1.96/np.sqrt(obs)) or v >= (1.96/np.sqrt(obs))) and i > 0:
+        if (v <= (-1.96/np.sqrt(obs)) or v >= (1.96/np.sqrt(obs))) :
             p_params.append(i)
     return p_params[:3]
 
@@ -126,7 +126,7 @@ def Get_q_params(data):
     obs = len(data)
     q_params = []
     for i,v in enumerate(pcfarray):
-        if (v <= (-1.96/np.sqrt(obs)) or v >= (1.96/np.sqrt(obs))) and i > 0:
+        if (v <= (-1.96/np.sqrt(obs)) or v >= (1.96/np.sqrt(obs))) :
             q_params.append(i)
     return q_params[:3]
 
