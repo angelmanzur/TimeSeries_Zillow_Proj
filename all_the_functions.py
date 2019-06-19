@@ -56,6 +56,7 @@ def Plot_Compare(data, tdata):
     plt.ylabel(r'Delta data', fontsize=16)
     plt.grid(True)
 
+import gc
 def Get_Best_Model(data, p_params, q_params):
     """
     Use a SARIMAX fit to get the best model for the data
@@ -69,54 +70,65 @@ def Get_Best_Model(data, p_params, q_params):
     p = p_params
     d = range(0,2)
     q = q_params
-
+    ncount = 0
     pdq = list(itertools.product(p,d,q))
     seasonal_pdq = [(x[0], x[1],x[2],12) for x in list(itertools.product(p, d, q))]
     for param in pdq:
         for param_seasonal in seasonal_pdq:
             try:
-                
+                print('.', end='')
+                ncount += 1
+                if ncount % 64 ==0:
+                    print('-')
+                #with warnings.catch_warnings():
+    			   # warnings.filterwarnings("ignore")
                 mod = sm.tsa.statespace.SARIMAX(data,
                                             order=param,
                                             seasonal_order=param_seasonal,
                                             enforce_stationarity=False,
-                                            enforce_invertibility=False)
-                results = mod.fit(maxiter=200)
+                                            enforce_invertibility=False,
+                                            mle_regression=False,
+                                            maxiter=25)
+                # with warnings.catch_warnings():
+    			    # warnings.simplefilter("ignore", category=ConvergenceWarning)
+                	
+                #results = mod.fit(maxiter=50)#
+                results = mod.fit(maxiter=50)
 
-                if results.aic < lowest_AIC:
-                    lowest_AIC = results.aic
-                    best_model = mod
-                    best_param = param
-                    best_seasonal_param = param_seasonal
+               	if results.aic < lowest_AIC:
+            	   	lowest_AIC = results.aic
+	               	best_model = mod
+    	           	best_param = param
+        	       	best_seasonal_param = param_seasonal
 
             except:
                 continue
-            
+        gc.collect()        
     return best_model, best_param, best_seasonal_param
 
 def Get_p_params(data):
     """
     Get the p Parameters from an ACF 
     """
-    acfarray, confintarray = acf(data, alpha=.05)
+    acfarray, confintarray = acf(data, alpha=.05,nlags=12)
     obs = len(data)
     p_params = []
     for i,v in enumerate(acfarray):
         if (v <= (-1.96/np.sqrt(obs)) or v >= (1.96/np.sqrt(obs))) and i > 0:
             p_params.append(i)
-    return p_params[:4]
+    return p_params[:3]
 
 def Get_q_params(data):
     """
     Get the q Parameters from an PACF 
     """
-    pcfarray, confintarray = pacf(data, alpha=.05)
+    pcfarray, confintarray = pacf(data, alpha=.05,nlags=12)
     obs = len(data)
     q_params = []
     for i,v in enumerate(pcfarray):
         if (v <= (-1.96/np.sqrt(obs)) or v >= (1.96/np.sqrt(obs))) and i > 0:
             q_params.append(i)
-    return q_params[:4]
+    return q_params[:3]
 
 def Trend_elimination(data):
     """
@@ -134,15 +146,37 @@ def Trend_elimination(data):
     pvalue = Compare_Transformations(data, data_log)
     data_transformed.append(data_log)
     pvalues.append(pvalue)
-
+    
 #     print('diff 1')
     # diff
     name.append('diff_data')
-    data_diff = data.shift(12)
+    data_diff = data.shift(1)
     pvalue = Compare_Transformations(data, data_diff)
     data_transformed.append(data_diff)
     pvalues.append(pvalue)
-    
+
+    #  print('diff 1')
+    # diff
+    name.append('diff_data_12')
+    data_diff_12 = data.shift(12)
+    pvalue = Compare_Transformations(data, data_diff_12)
+    data_transformed.append(data_diff_12)
+    pvalues.append(pvalue)
+
+    # diff of logs
+    name.append('log_diff_data')
+    data_log_diff = data_log.shift(1)
+    pvalue = Compare_Transformations(data_log, data_log_diff)
+    data_transformed.append(data_log_diff)
+    pvalues.append(pvalue) 
+
+      # diff of logs
+    name.append('log_diff_data_24')
+    data_log_diff_24 = data_log.shift(24)
+    pvalue = Compare_Transformations(data_log, data_log_diff_24)
+    data_transformed.append(data_log_diff_24)
+    pvalues.append(pvalue) 
+
 #     print('rolling mean on data')
     # rolling mean
     name.append('rolling_mean_data')
@@ -163,6 +197,8 @@ def Trend_elimination(data):
     pvalue_min = np.min(pvalues)
 #     print(pvalue_min)
     lowesti = pvalues.index(pvalue_min)
+
+    # print(name, pvalues)
     return name[lowesti], pvalue_min, data_transformed[lowesti]
 
 def Make_PredictionPlot(results, ytrain, ytest, zipcode, time_cut, print_test=True):
