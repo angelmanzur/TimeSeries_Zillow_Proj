@@ -66,9 +66,9 @@ def Get_Best_Model(data, p_params, q_params):
     lowest_AIC =1e14
     best_param =0
     best_seasonal_param = 0
-    p = range(0,np.max(p_params))
+    p = p_params
     d = range(0,2)
-    q = range(0,np.max(q_params))
+    q = q_params
 
     pdq = list(itertools.product(p,d,q))
     seasonal_pdq = [(x[0], x[1],x[2],12) for x in list(itertools.product(p, d, q))]
@@ -81,7 +81,7 @@ def Get_Best_Model(data, p_params, q_params):
                                             seasonal_order=param_seasonal,
                                             enforce_stationarity=False,
                                             enforce_invertibility=False)
-                results = mod.fit()
+                results = mod.fit(maxiter=200)
 
                 if results.aic < lowest_AIC:
                     lowest_AIC = results.aic
@@ -104,11 +104,11 @@ def Get_p_params(data):
     for i,v in enumerate(acfarray):
         if (v <= (-1.96/np.sqrt(obs)) or v >= (1.96/np.sqrt(obs))) and i > 0:
             p_params.append(i)
-    return p_params[:2]
+    return p_params[:4]
 
 def Get_q_params(data):
     """
-    Get the p Parameters from an PACF 
+    Get the q Parameters from an PACF 
     """
     pcfarray, confintarray = pacf(data, alpha=.05)
     obs = len(data)
@@ -116,7 +116,7 @@ def Get_q_params(data):
     for i,v in enumerate(pcfarray):
         if (v <= (-1.96/np.sqrt(obs)) or v >= (1.96/np.sqrt(obs))) and i > 0:
             q_params.append(i)
-    return q_params[:2]
+    return q_params[:4]
 
 def Trend_elimination(data):
     """
@@ -134,19 +134,11 @@ def Trend_elimination(data):
     pvalue = Compare_Transformations(data, data_log)
     data_transformed.append(data_log)
     pvalues.append(pvalue)
-    
-    # sqrt
-#     print('sqrt')
-    name.append('sqrt_data')
-    data_sqrt = np.sqrt(data)
-    pvalue = Compare_Transformations(data, data_sqrt)
-    data_transformed.append(data_sqrt)
-    pvalues.append(pvalue)
 
 #     print('diff 1')
     # diff
     name.append('diff_data')
-    data_diff = data.diff()
+    data_diff = data.shift(12)
     pvalue = Compare_Transformations(data, data_diff)
     data_transformed.append(data_diff)
     pvalues.append(pvalue)
@@ -167,62 +159,39 @@ def Trend_elimination(data):
     data_transformed.append(data_ewm)
     pvalues.append(pvalue)
     
-    # on the log
-    # rolling mean
-#     print('rolling mean on log data')
-    name.append('log_rolling_mean_data')
-    data_log_roll_mean = data_log.rolling(window=3).mean()
-    pvalue = Compare_Transformations(data, data_log_roll_mean)
-    data_transformed.append(data_log_roll_mean)
-    pvalues.append(pvalue)
-    # EWM
-    
-#     print('EWM on log data')
-    name.append('log_ewm_data')
-    data_log_ewm = data_log.ewm(halflife= 2).mean()
-    pvalue = Compare_Transformations(data, data_log_ewm)
-    data_transformed.append(data_log_ewm)
-    pvalues.append(pvalue)
-    
-#     print('EWM on rolling mean of log data')
-    name.append('log_rollmean_ewm_data')
-    data_log_roll_mean_ewm = data_log_roll_mean.ewm(halflife=2).mean()
-    pvalue = Compare_Transformations(data, data_log_roll_mean_ewm)
-    data_transformed.append(data_log_roll_mean_ewm)
-    pvalues.append(pvalue)
-    
-    
     #compare all p-values and return the lowest one
     pvalue_min = np.min(pvalues)
 #     print(pvalue_min)
     lowesti = pvalues.index(pvalue_min)
     return name[lowesti], pvalue_min, data_transformed[lowesti]
 
-def Make_PredictionPlot(results, ytrain, ytest, zipcode):
+def Make_PredictionPlot(results, ytrain, ytest, zipcode, time_cut, print_test=True):
     fig = plt.figure(figsize=(14,7))
-    pred = results.get_prediction(start=pd.to_datetime('2017-07'),
+    pred = results.get_prediction(start=pd.to_datetime(time_cut)+pd.DateOffset(months=1),
                               end=pd.to_datetime('2019-04'),
                              dynamic=True)
     pred_ci = pred.conf_int() 
-
-
-    ax = ytrain.plot(label='observed')
-    ytest.plot(ax=ax, label='y_test',lw=4, c='b')
-    pred.predicted_mean.plot(ax = ax, label='Prediction')
+    
+    ax = ytrain.plot(label='Train Data',lw=4)
+    if print_test:
+        ytest.plot(ax=ax, label='Test Data',lw=4, c='b')
+    
+    pred.predicted_mean.plot(ax = ax, label='Prediction',lw=4,
+                             color='orange',linestyle='--')
     ax.fill_between(pred_ci.index,
                pred_ci.iloc[:,0],
-               pred_ci.iloc[:,1], color='k', alpha=0.2)
+               pred_ci.iloc[:,1], color='k', alpha=0.25)
 
-    pred_future = results.get_forecast(steps=16)
-    pred_ci2 = pred_future.conf_int()
+#     pred_future = results.get_forecast(steps=16)
+#     pred_ci2 = pred_future.conf_int()
 
 #     pred_future.predicted_mean.plot(ax=ax, label=' Future Forecast')
 #     ax.fill_between(pred_ci2.index, 
 #                pred_ci2.iloc[:,0],
 #                pred_ci2.iloc[:,1], color='k',alpha = 0.25)
 
-    plt.title('Zipcode {}'.format(zipcode), fontsize=18)
-    plt.xlabel('Date',fontsize=18)
-    plt.ylabel('Price', fontsize=18)
-    plt.legend(fontsize=12)
+    plt.title('Zipcode {}'.format(zipcode), fontsize=22)
+    plt.xlabel('Date',fontsize=20)
+    plt.ylabel('Price', fontsize=20)
+    plt.legend(fontsize=18)
     plt.grid(True)
